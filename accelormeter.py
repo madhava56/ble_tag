@@ -1,38 +1,58 @@
-from bluepy.btle import Scanner, DefaultDelegate
+#include <stdio.h>
+#include <stdint.h>
+#include <math.h>
 
-class BLEScanDelegate(DefaultDelegate):
-    def __init__(self):
-        DefaultDelegate.__init__(self)
+// Define the structure for Accelerometer data
+typedef struct {
+    uint16_t x_axis;
+    uint16_t y_axis;
+    uint16_t z_axis;
+} AccelerometerData;
 
-    def handleDiscovery(self, dev, isNewDev, isNewData):
-        if isNewDev and dev.addr == "0x009078563412":
-            print("Discovered BLE Tag:", dev.addr)
-            for (adtype, desc, value) in dev.getScanData():
-                if desc == "Manufacturer":
-                    # Check if it's an accelerometer beacon
-                    if value.startswith("1a18"):
-                        parse_accelerometer_data(value[4:])
-                        break
+// Parse Accelerometer data from the given packet
+AccelerometerData parseAccelerometerData(uint8_t *data) {
+    AccelerometerData accelData;
+    accelData.x_axis = (uint16_t)data[11] << 8 | data[10];
+    accelData.y_axis = (uint16_t)data[13] << 8 | data[12];
+    accelData.z_axis = (uint16_t)data[15] << 8 | data[14];
+    return accelData;
+}
 
-def parse_accelerometer_data(data):
-    frame_type = int(data[0:2], 16)
-    
-    if frame_type == 0xA1:
-        version = int(data[2:4], 16)
-        battery_level = int(data[4:6], 16)
-        x_axis = int(data[6:10], 16) / 256.0
-        y_axis = int(data[10:14], 16) / 256.0
-        z_axis = int(data[14:18], 16) / 256.0
+// Process Accelerometer data packet
+void processAccelerometerPacket(uint8_t *data) {
+    // Assuming the packet structure based on provided definitions
+    uint8_t frameType = data[9];
 
-        print("Version:", version)
-        print("Battery Level:", battery_level)
-        print("X-Axis:", x_axis)
-        print("Y-Axis:", y_axis)
-        print("Z-Axis:", z_axis)
+    if (frameType == 0xA1) {
+        // Accelerometer frame
+        AccelerometerData accelData = parseAccelerometerData(data);
 
-def main():
-    scanner = Scanner().withDelegate(BLEScanDelegate())
-    devices = scanner.scan(10)  # Scan for 10 seconds
+        // Calculate the magnitude of the acceleration vector
+        double accelerationMagnitude = sqrt(pow(accelData.x_axis, 2) + pow(accelData.y_axis, 2) + pow(accelData.z_axis, 2));
 
-if __name__ == "__main__":
-    main()
+        // Set a threshold value for movement detection
+        double threshold = 100.0;  // Adjust this value based on your requirements
+
+        // Check if the magnitude exceeds the threshold
+        if (accelerationMagnitude > threshold) {
+            printf("Tag is moving\n");
+        } else {
+            printf("Tag is stationary\n");
+        }
+    } else {
+        //  Unsupported frame type
+        printf("Unsupported frame type: 0x%02X\n", frameType);
+    }
+}
+
+int main() {
+    // Example BLE packet for Accelerometer data
+    uint8_t accelerometerDataPacket[] = {
+        0x02, 0x01, 0x06, 0x03, 0x03, 0xE1, 0xFF, 0x03, 0x18, 0xE1, 0xFF, 0xA1, 0x03, 0x64, 0x00, 0x80, 0xFF, 0x38, 0x38, 0x01, 0x00, 0x90, 0x78, 0x56, 0x34, 0x12};
+
+    // Process Accelerometer data packet
+    processAccelerometerPacket(accelerometerDataPacket);
+
+    return 0;
+}
+
